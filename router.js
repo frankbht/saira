@@ -1,48 +1,30 @@
-const mongoose = require('mongoose');
-const bcrypt = require('bcrypt-nodejs');
-const Schema = mongoose.Schema;
+const Authentication = require('./controllers/authentication');
+const Dish = require('./controllers/dish');
+const User = require('./controllers/user');
+const passportService = require('./services/passport');
+const passport = require('passport');
 
-const userSchema = new Schema({
-  email: { type: String, unique: true, required: true, lowercase: true },
-  password: { type: String, unique: true, required: true,minlength:6 },
-  role: { type: String, required: true, enum: [ 'USER', 'CHEF', 'ADMIN' ], default: 'USER' },
-  createdAt: { type: Date, required: true, default: Date.now },
-  phone: { type: String },
-  location: {
-    address: { type: String },
-    geo: {
-      lat: { type: Number },
-      lng: { type: Number }
-    }
-  },
-  following: [ {type: Schema.Types.ObjectId, ref: 'user'} ],
-  favorite: [ {type: Schema.Types.ObjectId, ref: 'dish'} ],
-  follower: [ {type: Schema.Types.ObjectId, ref: 'user'} ],
-  dish: [ {type: Schema.Types.ObjectId, ref: 'dish'} ]
-});
+const requireAuth = passport.authenticate('jwt', { session: false});
+const requireSignin = passport.authenticate('local', { session: false });
 
-// on save hook, encrypt password
-userSchema.pre('save', function(next) {
-  const user = this;
-  bcrypt.genSalt(10, function(err, salt) {
-    if (err) { return next(err) };
-    bcrypt.hash(user.password, salt, null, function(err, hash) {
-      if (err) { return next(err); }
-      user.password = hash;
-      next();
-    });
+module.exports = function(app) {
+  // user
+  app.get('/', requireAuth, function(req, res) {
+    res.send({ message: 'this is a simple test message' });
   });
-});
+  app.post('/signin', requireSignin, Authentication.signin);
+  app.post('/signup', Authentication.signup);
+  // dish
+  app.get('/dish/show', requireAuth, Dish.show);
+  app.post('/dish/create', requireAuth, Dish.create);
+  app.put('/dish/:id', requireAuth, Dish.update);
+  app.delete('/dish/:id', requireAuth, Dish.delete);
+  app.get('/dish/search/:id', requireAuth, Dish.searchById);
+  app.post('/dish/search',Dish.searchByLocation);
 
-// compare encrypt password
-userSchema.methods.comparePassword = function(candidatePassword, callback) {
-  bcrypt.compare(candidatePassword, this.password, function(err, isMatch) {
-    if (err) { return callback(err); }
-
-    callback(null, isMatch);
-  });
-}
-
-const modelClass = mongoose.model('user', userSchema);
-
-module.exports = modelClass;
+  //user
+  app.get('/user/:email',requireAuth,User.findByEmail);
+  app.get('/user',User.listAll);
+  app.post('/user/update',requireAuth,User.updateInfo);
+  app.post('/user/favo/update',requireAuth,User.updateFavorite);
+};
